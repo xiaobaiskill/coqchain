@@ -223,6 +223,21 @@ contract Staker {
         return _blockNumber / epoch;
     }
 
+    function needVote(uint256 _blockNumber)
+        public
+        view
+        existSigner(msg.sender)
+        returns (bool)
+    {
+        uint256 cycle_ = getCycle(_blockNumber);
+        if (initiateProposals[cycle_] != address(0)) {
+            if (proposals[cycle_][0].votes[msg.sender] == VoteRes.UNKNOW) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function _handleProposal(uint256 _cycle) internal {
         Proposal[] storage proposals_ = proposals[_cycle];
         uint256 median_ = signers.length() / 2;
