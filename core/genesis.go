@@ -291,21 +291,39 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 
 	if threshold.Uint64() > 0 {
 		var signerCnt int64 = 0
-		slot0Hash := common.BigToHash(big.NewInt(0))
-		ks := crypto.NewKeccakState()
+
+		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{0}), common.BigToHash(big.NewInt(0).SetUint64(g.Config.Posa.Epoch)))
+		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{1}), common.BigToHash(threshold))
+		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{2}), common.BigToHash(big.NewInt(10))) // 10%
+
 		for addr, account := range g.Alloc {
 			if account.Balance.Cmp(threshold) > 0 {
 				statedb.SubBalance(addr, threshold)
-				addr2Hash := addr.Hash()
-				keys := append([]byte{}, addr2Hash[:]...)
-				keys = append(keys, slot0Hash[:]...)
-				ks.Reset()
-				ks.Write(keys[:])
-				stateAddr := ks.Sum(nil)
-				statedb.SetState(contracts.SlashAddr, common.BytesToHash(stateAddr), common.BigToHash(threshold))
+				// Keccak256(p) + signerCnt
+				statedb.SetState(contracts.SlashAddr, common.BigToHash(
+					big.NewInt(0).Add(
+						common.BytesToHash(crypto.Keccak256(
+							common.LeftPadBytes(hexutil.MustDecode("0x03"), 32),
+						)).Big(),
+						big.NewInt(signerCnt),
+					),
+				), common.BytesToHash(common.RightPadBytes(addr.Bytes(), 32)))
+
+				// Keccak256(k.p)
+				statedb.SetState(contracts.SlashAddr, common.BytesToHash(crypto.Keccak256(
+					common.RightPadBytes(addr.Bytes(), 32), // bytes32
+					common.LeftPadBytes(hexutil.MustDecode("0x04"), 32),
+				)), common.HexToHash("0x1"))
+
+				statedb.SetState(contracts.SlashAddr, common.BytesToHash(crypto.Keccak256(
+					common.LeftPadBytes(addr.Bytes(), 32), // address
+					common.LeftPadBytes(hexutil.MustDecode("0x05"), 32),
+				)), common.BigToHash(threshold))
+
 				signerCnt++
 			}
 		}
+		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{3}), common.BigToHash(big.NewInt(signerCnt)))
 		statedb.AddBalance(contracts.SlashAddr, big.NewInt(0).Mul(big.NewInt(signerCnt), threshold))
 	}
 }

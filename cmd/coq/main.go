@@ -40,6 +40,7 @@ import (
 	"github.com/Ankr-network/coqchain/log"
 	"github.com/Ankr-network/coqchain/metrics"
 	"github.com/Ankr-network/coqchain/node"
+	"github.com/Ankr-network/coqchain/stake"
 	"github.com/Ankr-network/coqchain/utils/extdb"
 
 	// Force-load the tracer engines to trigger registration
@@ -340,6 +341,8 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend) {
 		utils.Fatalf("Failed to attach to self: %v", err)
 	}
 	ethClient := ethclient.NewClient(rpcClient)
+
+	stake.InitStake(ethClient, backend.ChainConfig().ChainID)
 
 	go func() {
 		// Open any wallets already attached

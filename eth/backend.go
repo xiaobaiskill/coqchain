@@ -55,6 +55,7 @@ import (
 	"github.com/Ankr-network/coqchain/params"
 	"github.com/Ankr-network/coqchain/rlp"
 	"github.com/Ankr-network/coqchain/rpc"
+	"github.com/Ankr-network/coqchain/stake"
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -474,6 +475,8 @@ func (s *Coqchain) StartMining(threads int) error {
 				return fmt.Errorf("signer missing: %v", err)
 			}
 			posa.Authorize(eb, wallet.SignData)
+
+			stake.InitWallet(wallet, accounts.Account{Address: eb})
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

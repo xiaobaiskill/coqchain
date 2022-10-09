@@ -33,6 +33,7 @@ import (
 	"github.com/Ankr-network/coqchain/consensus"
 	"github.com/Ankr-network/coqchain/consensus/misc"
 	"github.com/Ankr-network/coqchain/core/contracts"
+	"github.com/Ankr-network/coqchain/core/contracts/staking/staker"
 	"github.com/Ankr-network/coqchain/core/state"
 	"github.com/Ankr-network/coqchain/core/types"
 	"github.com/Ankr-network/coqchain/crypto"
@@ -41,6 +42,7 @@ import (
 	"github.com/Ankr-network/coqchain/params"
 	"github.com/Ankr-network/coqchain/rlp"
 	"github.com/Ankr-network/coqchain/rpc"
+	"github.com/Ankr-network/coqchain/stake"
 	"github.com/Ankr-network/coqchain/trie"
 	"github.com/Ankr-network/coqchain/utils/extdb"
 	"github.com/Ankr-network/coqchain/utils/share"
@@ -241,8 +243,7 @@ func (c *Posa) Author(header *types.Header) (common.Address, error) {
 	return ecrecover(header, c.signatures)
 }
 
-// return not exist current signer list
-func cmp(lst, cur []common.Address) []common.Address {
+func excess(lst, cur []common.Address) []common.Address {
 	rs := make([]common.Address, 0)
 	for _, v := range lst {
 		exist := false
@@ -256,6 +257,12 @@ func cmp(lst, cur []common.Address) []common.Address {
 			rs = append(rs, v)
 		}
 	}
+	return rs
+}
+
+// return not exist current signer list
+func cmp(lst, cur []common.Address) []common.Address {
+	rs := excess(lst, cur)
 
 	lst = lst[:0]
 	for _, v := range cur {
@@ -800,14 +807,34 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 			}
 
 			// compare last signers with current signers
-			if number%c.config.Epoch == 0 {
+			if number%c.config.Epoch != 0 {
 				if len(c.lastSigners) == 0 {
 					for _, signer := range snap.signers() {
 						c.lastSigners = append(c.lastSigners, signer)
 					}
 				} else {
+					addedSigners := excess(snap.signers(), c.lastSigners)
 					notExistSigners := cmp(c.lastSigners, snap.signers())
-					log.Warn("Seal", "height", number, "not", notExistSigners)
+					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
+
+					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+					agrees := make([]bool, len(notExistSigners))
+					for _, v := range notExistSigners {
+						proposal = append(proposal, staker.StakerProposalReq{
+							Votee:    v,
+							VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
+						})
+						agrees = append(agrees, true)
+					}
+
+					for _, v := range addedSigners {
+						proposal = append(proposal, staker.StakerProposalReq{
+							Votee:    v,
+							VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
+						})
+						agrees = append(agrees, true)
+					}
+					stake.Vote(proposal, agrees)
 				}
 			}
 
