@@ -342,7 +342,7 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend) {
 	}
 	ethClient := ethclient.NewClient(rpcClient)
 
-	stake.InitStake(ethClient, backend.ChainConfig().ChainID)
+	stake.InitStake(backend, ethClient)
 
 	go func() {
 		// Open any wallets already attached

@@ -2,6 +2,8 @@ package stake
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/Ankr-network/coqchain/accounts"
@@ -10,7 +12,10 @@ import (
 	"github.com/Ankr-network/coqchain/core/contracts"
 	"github.com/Ankr-network/coqchain/core/contracts/staking/staker"
 	"github.com/Ankr-network/coqchain/core/types"
+	"github.com/Ankr-network/coqchain/crypto"
 	"github.com/Ankr-network/coqchain/ethclient"
+	"github.com/Ankr-network/coqchain/log"
+	"github.com/Ankr-network/coqchain/params"
 )
 
 const (
@@ -30,6 +35,7 @@ type stake struct {
 	contract common.Address
 	chainId  *big.Int
 	Staker   *staker.Staker
+	backend  Backend
 }
 
 type signer struct {
@@ -43,15 +49,16 @@ var (
 )
 
 func InitStake(
+	backend Backend,
 	client *ethclient.Client,
-	chainId *big.Int,
 ) {
 	s, _ := staker.NewStaker(contracts.SlashAddr, client)
 
 	Stake = &stake{
 		contract: contracts.SlashAddr,
-		chainId:  chainId,
+		chainId:  backend.ChainConfig().ChainID,
 		Staker:   s,
+		backend:  backend,
 	}
 }
 
@@ -66,7 +73,17 @@ func InitWallet(
 }
 
 func Vote(proposals []staker.StakerProposalReq, agrees []bool, txOps ...TxOps) (*types.Transaction, error) {
-	return Stake.Staker.Vote(getTransactorOpts(txOps...), proposals, agrees)
+
+	txOps = append(txOps, func(tops *bind.TransactOpts) {
+		tops.NoSend = true
+	})
+
+	tx, err := Stake.Staker.Vote(getTransactorOpts(txOps...), proposals, agrees)
+	if err != nil {
+		return nil, err
+	}
+	_, err = SubmitTransaction(context.Background(), Stake.backend, tx)
+	return tx, err
 }
 
 func getTransactorOpts(txOps ...TxOps) *bind.TransactOpts {
@@ -85,3 +102,56 @@ func getTransactorOpts(txOps ...TxOps) *bind.TransactOpts {
 }
 
 type TxOps func(*bind.TransactOpts)
+
+type Backend interface {
+	CurrentBlock() *types.Block
+	SendTx(ctx context.Context, signedTx *types.Transaction) error
+	RPCTxFeeCap() float64     // global tx fee cap for all transaction related APIs
+	UnprotectedAllowed() bool // allows only for EIP155 transactions.
+	ChainConfig() *params.ChainConfig
+}
+
+// SubmitTransaction is a helper function that submits tx to txPool and logs a message.
+func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+	// If the transaction fee cap is already specified, ensure the
+	// fee of the given transaction is _reasonable_.
+	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+		return common.Hash{}, err
+	}
+	if !b.UnprotectedAllowed() && !tx.Protected() {
+		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
+		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
+	}
+	if err := b.SendTx(ctx, tx); err != nil {
+		return common.Hash{}, err
+	}
+	// Print a log with full tx details for manual investigations and interventions
+	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	if tx.To() == nil {
+		addr := crypto.CreateAddress(from, tx.Nonce())
+		log.Info("Submitted contract creation", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "contract", addr.Hex(), "value", tx.Value())
+	} else {
+		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value())
+	}
+	return tx.Hash(), nil
+}
+
+// checkTxFee is an internal function used to check whether the fee of
+// the given transaction is _reasonable_(under the cap).
+func checkTxFee(gasPrice *big.Int, gas uint64, cap float64) error {
+	// Short circuit if there is no cap for transaction fee at all.
+	if cap == 0 {
+		return nil
+	}
+	feeEth := new(big.Float).Quo(new(big.Float).SetInt(new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(gas))), new(big.Float).SetInt(big.NewInt(params.Ether)))
+	feeFloat, _ := feeEth.Float64()
+	if feeFloat > cap {
+		return fmt.Errorf("tx fee (%.2f ether) exceeds the configured cap (%.2f ether)", feeFloat, cap)
+	}
+	return nil
+}
