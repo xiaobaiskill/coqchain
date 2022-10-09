@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/Ankr-network/coqchain/common"
@@ -280,14 +281,22 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 
 	threshold := g.Config.Posa.SealerBalanceThreshold
 
+	allocList := make(genesisAllocList, 0, len(g.Alloc))
+
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
+		allocList = append(allocList, genesisAllocItem{
+			addr:           addr,
+			GenesisAccount: account,
+		})
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
 	}
+
+	sort.Sort(allocList)
 
 	if threshold.Uint64() > 0 {
 		var signerCnt int64 = 0
@@ -296,7 +305,8 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{1}), common.BigToHash(threshold))
 		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{2}), common.BigToHash(big.NewInt(10))) // 10%
 
-		for addr, account := range g.Alloc {
+		for _, item := range allocList {
+			addr, account := item.addr, item.GenesisAccount
 			if account.Balance.Cmp(threshold) > 0 {
 				statedb.SubBalance(addr, threshold)
 				// Keccak256(p) + signerCnt
