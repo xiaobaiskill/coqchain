@@ -834,7 +834,9 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 						})
 						agrees = append(agrees, true)
 					}
-					stake.Vote(proposal, agrees)
+					if len(proposal) != 0 {
+						stake.Vote(proposal, agrees)
+					}
 				}
 			}
 
