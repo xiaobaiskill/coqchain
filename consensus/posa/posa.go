@@ -588,7 +588,7 @@ func (c *Posa) getCycleVotedRes(statedb *state.StateDB, cycle *big.Int) bool {
 	return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
 		common.LeftPadBytes(cycle.Bytes(), 32),
 		common.LeftPadBytes([]byte{8}, 32),
-	)).Hex() == "0x01"
+	)).Big().Text(10) == "1"
 }
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
