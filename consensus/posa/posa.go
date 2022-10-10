@@ -33,7 +33,6 @@ import (
 	"github.com/Ankr-network/coqchain/consensus"
 	"github.com/Ankr-network/coqchain/consensus/misc"
 	"github.com/Ankr-network/coqchain/core/contracts"
-	"github.com/Ankr-network/coqchain/core/contracts/staking/staker"
 	"github.com/Ankr-network/coqchain/core/state"
 	"github.com/Ankr-network/coqchain/core/types"
 	"github.com/Ankr-network/coqchain/crypto"
@@ -42,7 +41,6 @@ import (
 	"github.com/Ankr-network/coqchain/params"
 	"github.com/Ankr-network/coqchain/rlp"
 	"github.com/Ankr-network/coqchain/rpc"
-	"github.com/Ankr-network/coqchain/stake"
 	"github.com/Ankr-network/coqchain/trie"
 	"github.com/Ankr-network/coqchain/utils/extdb"
 	"github.com/Ankr-network/coqchain/utils/share"
@@ -817,26 +815,26 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 					notExistSigners := cmp(c.lastSigners, snap.signers())
 					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
-					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-					agrees := make([]bool, len(notExistSigners))
-					for _, v := range notExistSigners {
-						proposal = append(proposal, staker.StakerProposalReq{
-							Votee:    v,
-							VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
-						})
-						agrees = append(agrees, true)
-					}
+					// proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+					// agrees := make([]bool, len(notExistSigners))
+					// for _, v := range notExistSigners {
+					// 	proposal = append(proposal, staker.StakerProposalReq{
+					// 		Votee:    v,
+					// 		VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
+					// 	})
+					// 	agrees = append(agrees, true)
+					// }
 
-					for _, v := range addedSigners {
-						proposal = append(proposal, staker.StakerProposalReq{
-							Votee:    v,
-							VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
-						})
-						agrees = append(agrees, true)
-					}
-					if len(proposal) != 0 {
-						stake.Vote(proposal, agrees)
-					}
+					// for _, v := range addedSigners {
+					// 	proposal = append(proposal, staker.StakerProposalReq{
+					// 		Votee:    v,
+					// 		VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
+					// 	})
+					// 	agrees = append(agrees, true)
+					// }
+					// if len(proposal) != 0 {
+					// 	stake.Vote(proposal, agrees)
+					// }
 				}
 			}
 
