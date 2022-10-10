@@ -86,6 +86,10 @@ func Vote(proposals []staker.StakerProposalReq, agrees []bool, txOps ...TxOps) (
 	return tx, err
 }
 
+func SignerList() ([]common.Address, error) {
+	return Stake.Staker.SignerList(nil)
+}
+
 func getTransactorOpts(txOps ...TxOps) *bind.TransactOpts {
 	opts := &bind.TransactOpts{
 		From: sign.account.Address,

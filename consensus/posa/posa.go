@@ -830,42 +830,48 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 						c.lastSigners = append(c.lastSigners, signer)
 					}
 				} else {
+					contractSigner, err := stake.SignerList()
 					singers := snap.signers()
-					addedSigners := excess(singers, c.lastSigners)
-					notExistSigners := cmp(c.lastSigners, singers)
-					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
+					c.lastSigners = singers
+					if err == nil {
+						log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
+						notExistSigners := excess(contractSigner, singers)
+						addedSigners := excess(singers, contractSigner)
 
-					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-					agrees := make([]bool, 0, len(notExistSigners))
-					for _, v := range notExistSigners {
-						proposal = append(proposal, staker.StakerProposalReq{
-							Votee:    v,
-							VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
-						})
-						agrees = append(agrees, true)
-					}
+						log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
-					for _, v := range addedSigners {
-						proposal = append(proposal, staker.StakerProposalReq{
-							Votee:    v,
-							VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
-						})
-						agrees = append(agrees, true)
-					}
+						proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+						agrees := make([]bool, 0, len(notExistSigners))
+						for _, v := range notExistSigners {
+							proposal = append(proposal, staker.StakerProposalReq{
+								Votee:    v,
+								VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
+							})
+							agrees = append(agrees, true)
+						}
 
-					if len(proposal) != 0 {
-						stake.Vote(proposal, agrees)
-					} else {
-						cycle := number / c.config.Epoch
+						for _, v := range addedSigners {
+							proposal = append(proposal, staker.StakerProposalReq{
+								Votee:    v,
+								VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
+							})
+							agrees = append(agrees, true)
+						}
 
-						log.Info("proposal data",
-							"cycle", cycle,
-							"getCycleProposalNum", c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Text(10),
-							"getCycleVotedRes", c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))),
-						)
+						if len(proposal) != 0 {
+							stake.Vote(proposal, agrees)
+						} else {
+							cycle := number / c.config.Epoch
 
-						if cycle > 0 && c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))) {
-							stake.Vote(nil, nil)
+							log.Info("proposal data",
+								"cycle", cycle,
+								"getCycleProposalNum", c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Text(10),
+								"getCycleVotedRes", c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))),
+							)
+
+							if cycle > 0 && c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))) {
+								stake.Vote(nil, nil)
+							}
 						}
 					}
 				}
