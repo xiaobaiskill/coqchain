@@ -94,6 +94,11 @@ func CheckVoteStatus(number *big.Int, votee common.Address) (uint8, error) {
 	return Stake.Staker.CheckVoteStatus(nil, number, votee, sign.account.Address)
 }
 
+func SignerContains() bool {
+	res, _ := Stake.Staker.SignerContains(nil, sign.account.Address)
+	return res
+}
+
 func getTransactorOpts(txOps ...TxOps) *bind.TransactOpts {
 	opts := &bind.TransactOpts{
 		From: sign.account.Address,

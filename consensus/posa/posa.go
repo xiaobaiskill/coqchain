@@ -828,7 +828,7 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 					contractSigner, err := stake.SignerList()
 					singers := snap.signers()
 					c.lastSigners = singers
-					if err == nil {
+					if err == nil && stake.SignerContains() {
 						log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
 						notExistSigners := excess(contractSigner, singers)
 						addedSigners := excess(singers, contractSigner)
