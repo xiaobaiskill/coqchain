@@ -90,6 +90,10 @@ func SignerList() ([]common.Address, error) {
 	return Stake.Staker.SignerList(nil)
 }
 
+func CheckVoteStatus(number *big.Int, votee common.Address) (uint8, error) {
+	return Stake.Staker.CheckVoteStatus(nil, number, votee, sign.account.Address)
+}
+
 func getTransactorOpts(txOps ...TxOps) *bind.TransactOpts {
 	opts := &bind.TransactOpts{
 		From: sign.account.Address,

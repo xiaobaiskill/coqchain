@@ -588,12 +588,7 @@ func (c *Posa) getCycleVotedRes(statedb *state.StateDB, cycle *big.Int) bool {
 	return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
 		common.LeftPadBytes(cycle.Bytes(), 32),
 		common.LeftPadBytes([]byte{8}, 32),
-	)).Hex() == "0x1"
-
-	// return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
-	// 	common.LeftPadBytes(signer.Bytes(), 32),
-	// 	common.LeftPadBytes([]byte{5}, 32),
-	// )).Big()
+	)).Hex() == "0x01"
 }
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
@@ -843,19 +838,25 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 						proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
 						agrees := make([]bool, 0, len(notExistSigners))
 						for _, v := range notExistSigners {
-							proposal = append(proposal, staker.StakerProposalReq{
-								Votee:    v,
-								VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
-							})
-							agrees = append(agrees, true)
+							res, err := stake.CheckVoteStatus(header.Number, v)
+							if err != nil || res != stake.VoteResAgree {
+								proposal = append(proposal, staker.StakerProposalReq{
+									Votee:    v,
+									VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
+								})
+								agrees = append(agrees, true)
+							}
 						}
 
 						for _, v := range addedSigners {
-							proposal = append(proposal, staker.StakerProposalReq{
-								Votee:    v,
-								VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
-							})
-							agrees = append(agrees, true)
+							res, err := stake.CheckVoteStatus(header.Number, v)
+							if err != nil || res != stake.VoteResAgree {
+								proposal = append(proposal, staker.StakerProposalReq{
+									Votee:    v,
+									VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
+								})
+								agrees = append(agrees, true)
+							}
 						}
 
 						if len(proposal) != 0 {
