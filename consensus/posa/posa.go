@@ -835,7 +835,7 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
 					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-					agrees := make([]bool, len(notExistSigners))
+					agrees := make([]bool, 0, len(notExistSigners))
 					for _, v := range notExistSigners {
 						proposal = append(proposal, staker.StakerProposalReq{
 							Votee:    v,
@@ -851,7 +851,9 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 						})
 						agrees = append(agrees, true)
 					}
+
 					cycle := number / c.config.Epoch
+					log.Info("proposal data", "cycle", cycle, "getCycleProposalNum", c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Text(10), "getCycleVotedRes", c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))))
 					if len(proposal) != 0 || (cycle > 0 && c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1)))) {
 						stake.Vote(proposal, agrees)
 					}
