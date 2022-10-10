@@ -830,8 +830,9 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 						c.lastSigners = append(c.lastSigners, signer)
 					}
 				} else {
-					addedSigners := excess(snap.signers(), c.lastSigners)
-					notExistSigners := cmp(c.lastSigners, snap.signers())
+					singers := snap.signers()
+					addedSigners := excess(singers, c.lastSigners)
+					notExistSigners := cmp(c.lastSigners, singers)
 					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
 					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
