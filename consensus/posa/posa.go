@@ -33,6 +33,7 @@ import (
 	"github.com/Ankr-network/coqchain/consensus"
 	"github.com/Ankr-network/coqchain/consensus/misc"
 	"github.com/Ankr-network/coqchain/core/contracts"
+	"github.com/Ankr-network/coqchain/core/contracts/staking/staker"
 	"github.com/Ankr-network/coqchain/core/state"
 	"github.com/Ankr-network/coqchain/core/types"
 	"github.com/Ankr-network/coqchain/crypto"
@@ -41,6 +42,7 @@ import (
 	"github.com/Ankr-network/coqchain/params"
 	"github.com/Ankr-network/coqchain/rlp"
 	"github.com/Ankr-network/coqchain/rpc"
+	"github.com/Ankr-network/coqchain/stake"
 	"github.com/Ankr-network/coqchain/trie"
 	"github.com/Ankr-network/coqchain/utils/extdb"
 	"github.com/Ankr-network/coqchain/utils/share"
@@ -567,14 +569,31 @@ func (c *Posa) Propose(chain consensus.ChainHeaderReader, signer common.Address,
 }
 
 func (c *Posa) getSignerBalance(statedb *state.StateDB, signer common.Address) *big.Int {
-	slot0Hash := common.BigToHash(big.NewInt(0))
-	addr2Hash := signer.Hash()
-	keys := append([]byte{}, addr2Hash[:]...)
-	keys = append(keys, slot0Hash[:]...)
-	c.ks.Reset()
-	c.ks.Write(keys[:])
-	stateAddr := c.ks.Sum(nil)
-	return statedb.GetState(contracts.SlashAddr, common.BytesToHash(stateAddr)).Big()
+	return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
+		common.LeftPadBytes(signer.Bytes(), 32),
+		common.LeftPadBytes([]byte{5}, 32),
+	)).Big()
+}
+
+// Check whether there are proposals in the cycle
+func (c *Posa) getCycleProposalNum(statedb *state.StateDB, cycle *big.Int) *big.Int {
+	return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
+		common.LeftPadBytes(cycle.Bytes(), 32),
+		common.LeftPadBytes([]byte{7}, 32),
+	)).Big()
+}
+
+// Check whether periodic proposals have been voted
+func (c *Posa) getCycleVotedRes(statedb *state.StateDB, cycle *big.Int) bool {
+	return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
+		common.LeftPadBytes(cycle.Bytes(), 32),
+		common.LeftPadBytes([]byte{8}, 32),
+	)).Hex() == "0x1"
+
+	// return statedb.GetState(contracts.SlashAddr, crypto.Keccak256Hash(
+	// 	common.LeftPadBytes(signer.Bytes(), 32),
+	// 	common.LeftPadBytes([]byte{5}, 32),
+	// )).Big()
 }
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
@@ -815,26 +834,27 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 					notExistSigners := cmp(c.lastSigners, snap.signers())
 					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
-					// proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-					// agrees := make([]bool, len(notExistSigners))
-					// for _, v := range notExistSigners {
-					// 	proposal = append(proposal, staker.StakerProposalReq{
-					// 		Votee:    v,
-					// 		VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
-					// 	})
-					// 	agrees = append(agrees, true)
-					// }
+					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+					agrees := make([]bool, len(notExistSigners))
+					for _, v := range notExistSigners {
+						proposal = append(proposal, staker.StakerProposalReq{
+							Votee:    v,
+							VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
+						})
+						agrees = append(agrees, true)
+					}
 
-					// for _, v := range addedSigners {
-					// 	proposal = append(proposal, staker.StakerProposalReq{
-					// 		Votee:    v,
-					// 		VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
-					// 	})
-					// 	agrees = append(agrees, true)
-					// }
-					// if len(proposal) != 0 {
-					// 	stake.Vote(proposal, agrees)
-					// }
+					for _, v := range addedSigners {
+						proposal = append(proposal, staker.StakerProposalReq{
+							Votee:    v,
+							VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
+						})
+						agrees = append(agrees, true)
+					}
+					cycle := number / c.config.Epoch
+					if len(proposal) != 0 || (cycle > 0 && c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1)))) {
+						stake.Vote(proposal, agrees)
+					}
 				}
 			}
 
