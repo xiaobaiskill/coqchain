@@ -826,13 +826,13 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 			)
 
 			// compare last signers with current signers
-			if number%c.config.Epoch == 0 {
+			if number%c.config.Epoch != 0 {
 				if len(c.lastSigners) == 0 {
 					for _, signer := range snap.signers() {
 						c.lastSigners = append(c.lastSigners, signer)
 					}
 				} else {
-					cmp(c.lastSigners, snap.signers())
+					c.lastSigners = snap.signers()
 
 					// contractSigner, err := stake.SignerList()
 					// singers := snap.signers()
