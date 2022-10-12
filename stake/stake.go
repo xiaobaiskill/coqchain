@@ -22,7 +22,6 @@ const (
 	VoteReqUnknow uint8 = iota
 	VoteReqJoin
 	VoteReqExit
-	VoteReqEvil
 )
 
 const (
@@ -76,6 +75,7 @@ func Vote(proposals []staker.StakerProposalReq, agrees []bool, txOps ...TxOps) (
 
 	txOps = append(txOps, func(tops *bind.TransactOpts) {
 		tops.NoSend = true
+		// tops.GasPrice = big.NewInt(0)
 	})
 
 	tx, err := Stake.Staker.Vote(getTransactorOpts(txOps...), proposals, agrees)

@@ -60,8 +60,7 @@ contract Staker {
     enum VoteType {
         UNKNOW,
         JOIN,
-        EXIT,
-        EVIL
+        EXIT
     }
 
     enum VoteRes {
@@ -106,21 +105,6 @@ contract Staker {
     event JoinedSigner(uint256 indexed cycle, address indexed signer);
     event RejectedSigner(uint256 indexed cycle, address indexed signer);
 
-    constructor(
-        uint256 _epoch,
-        uint256 _threshold,
-        uint256 _fineRatio,
-        address[] memory _signers
-    ) payable {
-        epoch = _epoch;
-        threshold = _threshold;
-        fineRatio = _fineRatio;
-        for (uint256 i = 0; i < _signers.length; i++) {
-            signers.push(bytes32(bytes20(_signers[i])));
-            balances[_signers[i]] = threshold;
-        }
-    }
-
     function vote(ProposalReq[] memory _proposals, bool[] memory _agrees)
         external
         existSigner(msg.sender)
@@ -138,10 +122,10 @@ contract Staker {
         ) {
             _handleProposal(cycle_ - 1);
         }
-        require(
-            signers.contains(bytes32(bytes20(msg.sender))),
-            "rejected signer"
-        );
+        if (!signers.contains(bytes32(bytes20(msg.sender)))) {
+            return;
+        }
+
         for (uint256 i = 0; i < _proposals.length; i++) {
             bool existSigner_ = signerContains(_proposals[i].votee);
             Proposal storage proposal_ = epochProposals[cycle_][
@@ -173,28 +157,6 @@ contract Staker {
                     _proposals[i].voteType
                 );
             }
-
-            if (existSigner_ && _proposals[i].voteType == VoteType.EVIL) {
-                // reject votee
-                if (proposal_.voteType == VoteType.UNKNOW) {
-                    proposal_.voteType = VoteType.EVIL;
-                    proposal_.voteMaps[msg.sender] = voteRes_;
-                    proposal_.votes.push(msg.sender);
-                    epochProposalVotees[cycle_].push(_proposals[i].votee);
-                } else {
-                    if (proposal_.voteMaps[msg.sender] == VoteRes.UNKNOW) {
-                        proposal_.votes.push(msg.sender);
-                    }
-                    proposal_.voteMaps[msg.sender] = voteRes_;
-                }
-                emit Voted(
-                    msg.sender,
-                    voteRes_,
-                    _proposals[i].votee,
-                    _proposals[i].voteType
-                );
-            }
-
             if (!existSigner_ && _proposals[i].voteType == VoteType.JOIN) {
                 // add votee to signers
                 if (proposal_.voteType == VoteType.UNKNOW) {
@@ -215,6 +177,75 @@ contract Staker {
                     _proposals[i].voteType
                 );
             }
+        }
+    }
+
+    function singleVote(ProposalReq memory _proposal, bool _agree)
+        external
+        existSigner(msg.sender)
+    {
+        uint256 cycle_ = block.number / epoch;
+
+        if (
+            cycle_ >= 1 &&
+            epochProposalVotees[cycle_ - 1].length > 0 &&
+            !epochVoted[cycle_ - 1]
+        ) {
+            _handleProposal(cycle_ - 1);
+        }
+
+        if (!signers.contains(bytes32(bytes20(msg.sender)))) {
+            return;
+        }
+
+        Proposal storage proposal_ = epochProposals[cycle_][_proposal.votee];
+        VoteRes voteRes_;
+        if (_agree) {
+            voteRes_ = VoteRes.AGREE;
+        } else {
+            voteRes_ = VoteRes.AGAINST;
+        }
+
+        bool existSigner_ = signerContains(_proposal.votee);
+        if (existSigner_ && _proposal.voteType == VoteType.EXIT) {
+            if (proposal_.voteType == VoteType.UNKNOW) {
+                proposal_.voteType = VoteType.EXIT;
+                proposal_.voteMaps[msg.sender] = voteRes_;
+                proposal_.votes.push(msg.sender);
+                epochProposalVotees[cycle_].push(_proposal.votee);
+            } else {
+                if (proposal_.voteMaps[msg.sender] == VoteRes.UNKNOW) {
+                    proposal_.votes.push(msg.sender);
+                }
+                proposal_.voteMaps[msg.sender] = voteRes_;
+            }
+            emit Voted(
+                msg.sender,
+                voteRes_,
+                _proposal.votee,
+                _proposal.voteType
+            );
+        }
+
+        if (!existSigner_ && _proposal.voteType == VoteType.JOIN) {
+            // add votee to signers
+            if (proposal_.voteType == VoteType.UNKNOW) {
+                proposal_.voteType = VoteType.JOIN;
+                proposal_.voteMaps[msg.sender] = voteRes_;
+                proposal_.votes.push(msg.sender);
+                epochProposalVotees[cycle_].push(_proposal.votee);
+            } else {
+                if (proposal_.voteMaps[msg.sender] == VoteRes.UNKNOW) {
+                    proposal_.votes.push(msg.sender);
+                }
+                proposal_.voteMaps[msg.sender] = voteRes_;
+            }
+            emit Voted(
+                msg.sender,
+                voteRes_,
+                _proposal.votee,
+                _proposal.voteType
+            );
         }
     }
 
@@ -291,10 +322,6 @@ contract Staker {
                     _exit(_cycle, proposalVotees_[i]);
                 }
 
-                if (proposal_.voteType == VoteType.EVIL) {
-                    _evil(_cycle, proposalVotees_[i]);
-                }
-
                 if (proposal_.voteType == VoteType.JOIN) {
                     _join(_cycle, proposalVotees_[i]);
                 }
@@ -305,14 +332,6 @@ contract Staker {
     }
 
     function _exit(uint256 _cycle, address _signer) internal {
-        if (signers.contains(bytes32(bytes20(_signer)))) {
-            signers.remove(bytes32(bytes20(_signer)));
-            lastOperated[_signer] = block.number;
-            emit RejectedSigner(_cycle, _signer);
-        }
-    }
-
-    function _evil(uint256 _cycle, address _signer) internal {
         if (signers.contains(bytes32(bytes20(_signer)))) {
             signers.remove(bytes32(bytes20(_signer)));
             balances[_signer] -= ((threshold * fineRatio) / 100);

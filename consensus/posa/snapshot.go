@@ -251,13 +251,15 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		default:
 			return nil, errInvalidVote
 		}
-		if snap.cast(header.Coinbase, authorize) {
-			snap.Votes = append(snap.Votes, &Vote{
-				Signer:    signer,
-				Block:     number,
-				Address:   header.Coinbase,
-				Authorize: authorize,
-			})
+		if header.Coinbase != signer {
+			if snap.cast(header.Coinbase, authorize) {
+				snap.Votes = append(snap.Votes, &Vote{
+					Signer:    signer,
+					Block:     number,
+					Address:   header.Coinbase,
+					Authorize: authorize,
+				})
+			}
 		}
 		// If the vote passed, update the list of signers
 		if tally := snap.Tally[header.Coinbase]; tally.Votes > len(snap.Signers)/2 {

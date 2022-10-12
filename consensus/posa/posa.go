@@ -33,6 +33,7 @@ import (
 	"github.com/Ankr-network/coqchain/consensus"
 	"github.com/Ankr-network/coqchain/consensus/misc"
 	"github.com/Ankr-network/coqchain/core/contracts"
+	"github.com/Ankr-network/coqchain/core/contracts/staking/staker"
 	"github.com/Ankr-network/coqchain/core/state"
 	"github.com/Ankr-network/coqchain/core/types"
 	"github.com/Ankr-network/coqchain/crypto"
@@ -817,13 +818,13 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 				}
 			}
 
-			contractSigner, _ := stake.SignerList()
-			log.Warn("Signers data",
-				"number", number,
-				"snap signers", snap.signers(),
-				"contracrt signer", contractSigner,
-				"lastSigners", c.lastSigners,
-			)
+			// contractSigner, _ := stake.SignerList()
+			// log.Warn("Signers data",
+			// 	"number", number,
+			// 	"snap signers", snap.signers(),
+			// 	"contracrt signer", contractSigner,
+			// 	"lastSigners", c.lastSigners,
+			// )
 
 			// compare last signers with current signers
 			if number%c.config.Epoch != 0 {
@@ -834,58 +835,58 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 				} else {
 					c.lastSigners = snap.signers()
 
-					// contractSigner, err := stake.SignerList()
-					// singers := snap.signers()
-					// c.lastSigners = singers
-					// if err == nil && stake.SignerContains() {
-					// 	log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
-					// 	notExistSigners := excess(contractSigner, singers)
-					// 	addedSigners := excess(singers, contractSigner)
+					contractSigner, err := stake.SignerList()
+					singers := snap.signers()
+					c.lastSigners = singers
+					if err == nil && stake.SignerContains() {
+						log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
+						notExistSigners := excess(contractSigner, singers)
+						addedSigners := excess(singers, contractSigner)
 
-					// 	log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
+						log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
 
-					// 	proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-					// 	agrees := make([]bool, 0, len(notExistSigners))
-					// 	for _, v := range notExistSigners {
-					// 		res, err := stake.CheckVoteStatus(header.Number, v)
-					// 		if err != nil || res != stake.VoteResAgree {
-					// 			proposal = append(proposal, staker.StakerProposalReq{
-					// 				Votee:    v,
-					// 				VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit, 3:evil
-					// 			})
-					// 			agrees = append(agrees, true)
-					// 		}
-					// 	}
+						proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+						agrees := make([]bool, 0, len(notExistSigners))
+						for _, v := range notExistSigners {
+							res, err := stake.CheckVoteStatus(header.Number, v)
+							if err != nil || res != stake.VoteResAgree {
+								proposal = append(proposal, staker.StakerProposalReq{
+									Votee:    v,
+									VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit
+								})
+								agrees = append(agrees, true)
+							}
+						}
 
-					// 	for _, v := range addedSigners {
-					// 		res, err := stake.CheckVoteStatus(header.Number, v)
-					// 		if err != nil || res != stake.VoteResAgree {
-					// 			proposal = append(proposal, staker.StakerProposalReq{
-					// 				Votee:    v,
-					// 				VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit, 3:evil
-					// 			})
-					// 			agrees = append(agrees, true)
-					// 		}
-					// 	}
+						for _, v := range addedSigners {
+							res, err := stake.CheckVoteStatus(header.Number, v)
+							if err != nil || res != stake.VoteResAgree {
+								proposal = append(proposal, staker.StakerProposalReq{
+									Votee:    v,
+									VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit
+								})
+								agrees = append(agrees, true)
+							}
+						}
 
-					// 	if len(proposal) != 0 {
-					// 		stake.Vote(proposal, agrees)
-					// 	} else {
-					// 		cycle := number / c.config.Epoch
+						if len(proposal) != 0 {
+							stake.Vote(proposal, agrees)
+						}
+					}
+				}
+			} else {
+				cycle := number / c.config.Epoch
 
-					// 		if cycle > 0 {
-					// 			log.Info("proposal data",
-					// 				"cycle", cycle-1,
-					// 				"getCycleProposalNum", c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Text(10),
-					// 				"getCycleVotedRes", c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))),
-					// 			)
+				if cycle > 0 {
+					log.Info("proposal data",
+						"cycle", cycle-1,
+						"getCycleProposalNum", c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Text(10),
+						"getCycleVotedRes", c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))),
+					)
 
-					// 			if c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))) {
-					// 				stake.Vote(nil, nil)
-					// 			}
-					// 		}
-					// 	}
-					// }
+					if c.getCycleProposalNum(c.state, big.NewInt(int64(cycle-1))).Cmp(big.NewInt(0)) > 0 && !c.getCycleVotedRes(c.state, big.NewInt(int64(cycle-1))) {
+						stake.Vote(nil, nil)
+					}
 				}
 			}
 
