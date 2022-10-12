@@ -305,6 +305,10 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{1}), common.BigToHash(threshold))
 		statedb.SetState(contracts.SlashAddr, common.BytesToHash([]byte{2}), common.BigToHash(big.NewInt(10))) // 10%
 
+		slotAddrBig := common.BytesToHash(crypto.Keccak256(
+			common.LeftPadBytes(hexutil.MustDecode("0x03"), 32),
+		)).Big()
+
 		for _, item := range allocList {
 			addr, account := item.addr, item.GenesisAccount
 			if account.Balance.Cmp(threshold) > 0 {
@@ -312,9 +316,7 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 				// Keccak256(p) + signerCnt
 				statedb.SetState(contracts.SlashAddr, common.BigToHash(
 					big.NewInt(0).Add(
-						common.BytesToHash(crypto.Keccak256(
-							common.LeftPadBytes(hexutil.MustDecode("0x03"), 32),
-						)).Big(),
+						slotAddrBig,
 						big.NewInt(signerCnt),
 					),
 				), common.BytesToHash(common.RightPadBytes(addr.Bytes(), 32)))

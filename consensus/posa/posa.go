@@ -828,50 +828,43 @@ func (c *Posa) Seal(chain consensus.ChainHeaderReader, block *types.Block, resul
 
 			// compare last signers with current signers
 			if number%c.config.Epoch != 0 {
-				if len(c.lastSigners) == 0 {
-					for _, signer := range snap.signers() {
-						c.lastSigners = append(c.lastSigners, signer)
+				contractSigner, err := stake.SignerList()
+				singers := snap.signers()
+				log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
+
+				if err == nil && stake.SignerContains() {
+					// log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
+					notExistSigners := excess(contractSigner, singers)
+					addedSigners := excess(singers, contractSigner)
+
+					log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
+
+					proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
+					agrees := make([]bool, 0, len(notExistSigners))
+					for _, v := range notExistSigners {
+						res, err := stake.CheckVoteStatus(header.Number, v)
+						if err != nil || res != stake.VoteResAgree {
+							proposal = append(proposal, staker.StakerProposalReq{
+								Votee:    v,
+								VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit
+							})
+							agrees = append(agrees, true)
+						}
 					}
-				} else {
-					c.lastSigners = snap.signers()
 
-					contractSigner, err := stake.SignerList()
-					singers := snap.signers()
-					c.lastSigners = singers
-					if err == nil && stake.SignerContains() {
-						log.Warn("Signers data", "snap signers", singers, "contracrt signer", contractSigner)
-						notExistSigners := excess(contractSigner, singers)
-						addedSigners := excess(singers, contractSigner)
-
-						log.Warn("Seal", "height", number, "not", notExistSigners, "added", addedSigners)
-
-						proposal := make([]staker.StakerProposalReq, 0, len(notExistSigners)+len(addedSigners))
-						agrees := make([]bool, 0, len(notExistSigners))
-						for _, v := range notExistSigners {
-							res, err := stake.CheckVoteStatus(header.Number, v)
-							if err != nil || res != stake.VoteResAgree {
-								proposal = append(proposal, staker.StakerProposalReq{
-									Votee:    v,
-									VoteType: stake.VoteReqExit, // 0: unknow, 1: join, 2:exit
-								})
-								agrees = append(agrees, true)
-							}
+					for _, v := range addedSigners {
+						res, err := stake.CheckVoteStatus(header.Number, v)
+						if err != nil || res != stake.VoteResAgree {
+							proposal = append(proposal, staker.StakerProposalReq{
+								Votee:    v,
+								VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit
+							})
+							agrees = append(agrees, true)
 						}
+					}
 
-						for _, v := range addedSigners {
-							res, err := stake.CheckVoteStatus(header.Number, v)
-							if err != nil || res != stake.VoteResAgree {
-								proposal = append(proposal, staker.StakerProposalReq{
-									Votee:    v,
-									VoteType: stake.VoteReqJoin, // 0: unknow, 1: join, 2:exit
-								})
-								agrees = append(agrees, true)
-							}
-						}
-
-						if len(proposal) != 0 {
-							stake.Vote(proposal, agrees)
-						}
+					if len(proposal) != 0 {
+						stake.Vote(proposal, agrees)
 					}
 				}
 			} else {
